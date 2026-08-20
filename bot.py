@@ -3,8 +3,6 @@ import os
 from aiohttp import web
 
 from aiogram import Bot, Dispatcher, Router
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart
 from aiogram.types import (
     Message,
@@ -18,44 +16,18 @@ from aiogram.webhook.aiohttp_server import (
 )
 
 
-# =========================
-# ENV
-# =========================
-
 BOT_TOKEN = os.environ["BOT_TOKEN"]
-BASE_URL = os.environ["BASE_URL"].rstrip("/")
 TALLY_URL = os.environ["TALLY_URL"]
-WEBHOOK_SECRET = os.environ["WEBHOOK_SECRET"]
 
-WEBHOOK_PATH = "/webhook"
-WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}"
-
-
-# =========================
-# BOT
-# =========================
-
-bot = Bot(
-    token=BOT_TOKEN,
-    default=DefaultBotProperties(
-        parse_mode=ParseMode.HTML
-    )
-)
-
+bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 router = Router()
 
 dp.include_router(router)
 
 
-# =========================
-# /start
-# =========================
-
 @router.message(CommandStart())
 async def start_handler(message: Message):
-
-    photo = FSInputFile("images/welcome.jpg")
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -68,17 +40,15 @@ async def start_handler(message: Message):
         ]
     )
 
+    photo = FSInputFile("images/welcome.jpg")
+
     text = """
 <b>Політ нормальний?</b>
 
 Пропоную перевірити, хто сьогодні тримає кермо вашого життя і бізнесу.
 
-Я підготувала короткий <b>міні-чекап якості польоту</b>.
-
 ✈️ 10 запитань
 ⏱ близько 3 хвилин
-
-Після проходження ви побачите свою провідну зону та отримаєте точку для рефлексії.
 
 Тут немає правильних відповідей.
 Важлива лише чесність із собою.
@@ -87,52 +57,32 @@ async def start_handler(message: Message):
     await message.answer_photo(
         photo=photo,
         caption=text,
-        reply_markup=keyboard
+        reply_markup=keyboard,
+        parse_mode="HTML"
     )
 
 
-# =========================
-# HEALTH CHECK
-# =========================
-
-async def health_check(request):
-    return web.Response(text="Bot is running")
-
-
-# =========================
-# WEBHOOK
-# =========================
-
-async def on_startup(bot: Bot):
-    await bot.set_webhook(
-        url=WEBHOOK_URL,
-        secret_token=WEBHOOK_SECRET,
-        allowed_updates=dp.resolve_used_update_types()
+async def health(request):
+    return web.Response(
+        text="Bot is running",
+        status=200
     )
 
-    print(f"Webhook set: {WEBHOOK_URL}")
-
-
-dp.startup.register(on_startup)
-
-
-# =========================
-# SERVER
-# =========================
 
 def main():
 
     app = web.Application()
 
-    app.router.add_get("/", health_check)
+    # Перевірка Render
+    app.router.add_get("/", health)
 
+    # Telegram webhook
     SimpleRequestHandler(
         dispatcher=dp,
-        bot=bot,
-        secret_token=WEBHOOK_SECRET
+        bot=bot
     ).register(
         app,
-        path=WEBHOOK_PATH
+        path="/webhook"
     )
 
     setup_application(
@@ -141,7 +91,9 @@ def main():
         bot=bot
     )
 
-    port = int(os.environ.get("PORT", 10000))
+    port = int(os.environ.get("PORT", "10000"))
+
+    print(f"Starting server on 0.0.0.0:{port}")
 
     web.run_app(
         app,
